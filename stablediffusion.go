@@ -302,6 +302,14 @@ func (u *Upscaler) GetUpscaleFactor() int {
 
 // GenerateImage 生成图像
 func (c *Context) GenerateImage(cfg GenerationConfig) ([]*Image, error) {
+	// 校验采样器与调度器：未知值或库版本过旧时返回错误
+	if err := cfg.Sampler.Method.Validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Sampler.Scheduler.Validate(); err != nil {
+		return nil, err
+	}
+
 	// 初始化图像生成参数
 	params := &bindings.SdImgGenParams{}
 	bindings.SdImgGenParamsInit(params)
@@ -524,6 +532,20 @@ type VideoGenerationConfig struct {
 
 // GenerateVideo 生成视频
 func (c *Context) GenerateVideo(cfg VideoGenerationConfig) ([]*Image, error) {
+	// 校验采样器与调度器（含高噪声阶段）：未知值或库版本过旧时返回错误
+	if err := cfg.Sampler.Method.Validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Sampler.Scheduler.Validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.HighNoiseSampler.Method.Validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.HighNoiseSampler.Scheduler.Validate(); err != nil {
+		return nil, err
+	}
+
 	params := &bindings.SdVidGenParams{}
 	bindings.SdVidGenParamsInit(params)
 
@@ -714,4 +736,32 @@ func GetLoraApplyModeName(t bindings.LoraApplyMode) string {
 // StrToLoraApplyMode 将字符串转换为 LoraApplyMode
 func StrToLoraApplyMode(s string) bindings.LoraApplyMode {
 	return bindings.StrToLoraApplyMode(s)
+}
+
+// --- 采样器 / 调度器：解析与支持项查询 ---
+
+// ParseSampleMethod 将字符串（如 "euler_a"）解析为采样方法。
+// 传入未知值时返回 *bindings.UnknownSampleMethodError；
+// 若当前加载的库版本过旧不支持该采样方法，
+// 返回 *bindings.UnsupportedSampleMethodError（错误信息中提示升级库文件）。
+func ParseSampleMethod(s string) (bindings.SampleMethod, error) {
+	return bindings.ParseSampleMethod(s)
+}
+
+// ParseScheduler 将字符串（如 "karras"）解析为调度器。
+// 传入未知值时返回 *bindings.UnknownSchedulerError；
+// 若当前加载的库版本过旧不支持该调度器，
+// 返回 *bindings.UnsupportedSchedulerError（错误信息中提示升级库文件）。
+func ParseScheduler(s string) (bindings.Scheduler, error) {
+	return bindings.ParseScheduler(s)
+}
+
+// SupportedSampleMethods 返回当前加载的库实际支持的采样方法列表
+func SupportedSampleMethods() []bindings.SampleMethod {
+	return bindings.SupportedSampleMethods()
+}
+
+// SupportedSchedulers 返回当前加载的库实际支持的调度器列表
+func SupportedSchedulers() []bindings.Scheduler {
+	return bindings.SupportedSchedulers()
 }

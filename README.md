@@ -185,12 +185,86 @@ func main() {
 
 ---
 
+## 🎛 支持的采样器与调度器
+
+采样器（`SampleMethod`）与调度器（`Scheduler`）已整理为独立的 Go 枚举
+（见 `bindings/sampler.go`），常量值与 `stable-diffusion.h` 中的
+`enum sample_method_t` / `enum scheduler_t` 严格一一对应。
+
+### 采样器（SampleMethod）
+
+| 字符串名称 | Go 常量 | 值 |
+|-----------|---------|----|
+| `euler` | `bindings.EULER_SAMPLE_METHOD` | 0 |
+| `euler_a` | `bindings.EULER_A_SAMPLE_METHOD` | 1 |
+| `heun` | `bindings.HEUN_SAMPLE_METHOD` | 2 |
+| `dpm2` | `bindings.DPM2_SAMPLE_METHOD` | 3 |
+| `dpm++2s_a` | `bindings.DPMPP2S_A_SAMPLE_METHOD` | 4 |
+| `dpm++2m` | `bindings.DPMPP2M_SAMPLE_METHOD` | 5 |
+| `dpm++2mv2` | `bindings.DPMPP2Mv2_SAMPLE_METHOD` | 6 |
+| `ipndm` | `bindings.IPNDM_SAMPLE_METHOD` | 7 |
+| `ipndm_v` | `bindings.IPNDM_V_SAMPLE_METHOD` | 8 |
+| `lcm` | `bindings.LCM_SAMPLE_METHOD` | 9 |
+| `ddim_trailing` | `bindings.DDIM_TRAILING_SAMPLE_METHOD` | 10 |
+| `tcd` | `bindings.TCD_SAMPLE_METHOD` | 11 |
+| `res_multistep` | `bindings.RES_MULTISTEP_SAMPLE_METHOD` | 12 |
+| `res_2s` | `bindings.RES_2S_SAMPLE_METHOD` | 13 |
+
+### 调度器（Scheduler）
+
+| 字符串名称 | Go 常量 | 值 |
+|-----------|---------|----|
+| `discrete` | `bindings.DISCRETE_SCHEDULER` | 0 |
+| `karras` | `bindings.KARRAS_SCHEDULER` | 1 |
+| `exponential` | `bindings.EXPONENTIAL_SCHEDULER` | 2 |
+| `ays` | `bindings.AYS_SCHEDULER` | 3 |
+| `gits` | `bindings.GITS_SCHEDULER` | 4 |
+| `sgm_uniform` | `bindings.SGM_UNIFORM_SCHEDULER` | 5 |
+| `simple` | `bindings.SIMPLE_SCHEDULER` | 6 |
+| `smoothstep` | `bindings.SMOOTHSTEP_SCHEDULER` | 7 |
+| `kl_optimal` | `bindings.KL_OPTIMAL_SCHEDULER` | 8 |
+| `lcm` | `bindings.LCM_SCHEDULER` | 9 |
+| `bong_tangent` | `bindings.BONG_TANGENT_SCHEDULER` | 10 |
+
+### 解析与校验
+
+```go
+// 字符串 → 枚举（推荐用于 HTTP 参数、配置文件等外部输入）
+method, err := stablediffusion.ParseSampleMethod("euler_a")
+sched, err := stablediffusion.ParseScheduler("karras")
+
+// 直接校验枚举值
+err := bindings.DPMPP2M_SAMPLE_METHOD.Validate()
+
+// 查询当前加载的库实际支持的支持项
+samplers  := stablediffusion.SupportedSampleMethods()
+schedulers := stablediffusion.SupportedSchedulers()
+```
+
+**错误行为：**
+
+- **传入未知值**（如 `ParseSampleMethod("foo")` 或 `SampleMethod(99)`）：
+  返回 `*bindings.UnknownSampleMethodError` / `*bindings.UnknownSchedulerError`，
+  错误信息中列出全部支持的取值。
+- **库版本过旧**：如果某个采样器/调度器在 Go 绑定中已知，但当前加载的
+  `libstable-diffusion` 动态库版本过旧、尚不支持它，返回
+  `*bindings.UnsupportedSampleMethodError` / `*bindings.UnsupportedSchedulerError`，
+  **错误信息中会明确提示需要升级库文件**
+  （`please upgrade the libstable-diffusion library file`）。
+  此时重新编译新版 `stable-diffusion.cpp` 动态库即可。
+- `GenerateImage` / `GenerateVideo` 在调用底层库之前会自动校验
+  `Sampler`（含 `HighNoiseSampler`）配置，非法值直接返回上述错误。
+
+---
+
 ## 🛠 目录结构
 
 ```
 ├── bindings/                     # 底层 purego 绑定（1:1 映射 C API）
 │   ├── stablediffusion.go        # 绑定实现 + Mock
-│   └── stablediffusion_test.go   # 字符串/回调/Mock 测试
+│   ├── sampler.go                # 采样器/调度器枚举、解析与校验
+│   ├── stablediffusion_test.go   # 字符串/回调/Mock 测试
+│   └── sampler_test.go           # 采样器/调度器枚举与错误测试
 ├── stablediffusion.go            # 高层 Go API 封装
 ├── test/
 │   └── stablediffusion_test.go   # 高层 API 集成测试
@@ -212,6 +286,11 @@ func main() {
 | 1.1 | `TestCStringGoString` | Go↔C 字符串转换含 NULL 终止符 | 字符串相等，NULL 存在 |
 | 1.2 | `TestMockImplementation` | 无动态库时自动降级到 Mock | `GetSystemInfo()`/`GetVersion()` 返回非空 |
 | 1.3 | `TestCallbackWrapper` | `purego.NewCallback` 包装不被 GC 回收 | `currentLogCallback != 0` |
+| 1.4 | `TestSampleMethodEnumValues` / `TestSchedulerEnumValues` | 枚举值与 `stable-diffusion.h` 一致 | `EULER=0` … `SCHEDULER_COUNT=11` |
+| 1.5 | `TestEnumStringNames` / `TestParseRoundTrip` | 名称与 C 库一致、解析往返 | `euler_a`/`karras` 等往返相等 |
+| 1.6 | `TestParseUnknownValues` / `TestValidateOutOfRange` | 未知值返回错误 | 错误信息列出支持项 |
+| 1.7 | `TestLibraryTooOld` | 模拟旧版动态库 | 错误信息提示升级库文件 |
+| 1.8 | `TestSupportedLists` / `TestMockNameConversion` | 支持项查询与 Mock 行为 | 返回全部枚举值 |
 
 ### 高层 API 层 (`test/`)
 
@@ -223,6 +302,10 @@ func main() {
 | 2.4 | `TestCreateUpscaler` | `NewUpscaler` 无模型文件时 | 返回 `error` |
 | 2.5 | `TestConvertModel` | `ConvertModel` 无文件时 | 返回 `error` |
 | 2.6 | `TestImageGenerationConfig` | `GenerationConfig` 结构体初始化 | `Width=512`, `Height=512` |
+| 2.7 | `TestParseSamplerScheduler` | `ParseSampleMethod`/`ParseScheduler` | 合法名称解析正确 |
+| 2.8 | `TestParseUnknownSamplerScheduler` | 未知采样器/调度器 | 返回错误并列出支持项 |
+| 2.9 | `TestGenerateImageValidatesSampler` | `GenerateImage` 传入非法枚举 | 调用底层库前返回错误 |
+| 2.10 | `TestSupportedSamplersSchedulers` | 支持项查询 | 返回全部枚举值 |
 
 ### 运行所有测试
 
@@ -238,6 +321,11 @@ go test -v ./...
 --- PASS: TestMockImplementation
 === RUN   TestCallbackWrapper
 --- PASS: TestCallbackWrapper
+=== RUN   TestSampleMethodEnumValues
+--- PASS: TestSampleMethodEnumValues
+=== RUN   TestSchedulerEnumValues
+--- PASS: TestSchedulerEnumValues
+...
 PASS
 ok  github.com/example/stablediffusion/bindings
 
@@ -253,6 +341,14 @@ ok  github.com/example/stablediffusion/bindings
 --- PASS: TestConvertModel
 === RUN   TestImageGenerationConfig
 --- PASS: TestImageGenerationConfig
+=== RUN   TestParseSamplerScheduler
+--- PASS: TestParseSamplerScheduler
+=== RUN   TestParseUnknownSamplerScheduler
+--- PASS: TestParseUnknownSamplerScheduler
+=== RUN   TestGenerateImageValidatesSampler
+--- PASS: TestGenerateImageValidatesSampler
+=== RUN   TestSupportedSamplersSchedulers
+--- PASS: TestSupportedSamplersSchedulers
 PASS
 ok  github.com/example/stablediffusion/test
 ```

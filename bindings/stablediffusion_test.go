@@ -24,9 +24,8 @@ func TestCStringGoString(t *testing.T) {
 	}
 
 	// Verify null termination
-	// access the byte after the string
-	p := uintptr(unsafe.Pointer(cEmpty))
-	if *(*byte)(unsafe.Pointer(p)) != 0 {
+	// 空字符串的首字节即为 NULL 终止符
+	if *cEmpty != 0 {
 		t.Errorf("Expected null terminator")
 	}
 }

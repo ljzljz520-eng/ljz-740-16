@@ -70,10 +70,12 @@ func init() {
 }
 
 // 枚举类型定义
+//
+// 注意：SampleMethod（采样方法）与 Scheduler（调度器）的类型与常量定义
+// 已移至 sampler.go。每个枚举类型使用独立的 const 块，保证 iota 从 0 开始，
+// 与 stable-diffusion.h 中的枚举值严格一致。
 
 type RngType int
-type SampleMethod int
-type Scheduler int
 type Prediction int
 type SdType int
 type SdLogLevel int
@@ -81,47 +83,16 @@ type Preview int
 type LoraApplyMode int
 type SdCacheMode int
 
-// 常量定义
+// RngType 常量，对应 C 的 enum rng_type_t
 const (
-	// RngType
 	STD_DEFAULT_RNG RngType = iota
 	CUDA_RNG
 	CPU_RNG
 	RNG_TYPE_COUNT
+)
 
-	// SampleMethod
-	EULER_SAMPLE_METHOD SampleMethod = iota
-	EULER_A_SAMPLE_METHOD
-	HEUN_SAMPLE_METHOD
-	DPM2_SAMPLE_METHOD
-	DPMPP2S_A_SAMPLE_METHOD
-	DPMPP2M_SAMPLE_METHOD
-	DPMPP2Mv2_SAMPLE_METHOD
-	IPNDM_SAMPLE_METHOD
-	IPNDM_V_SAMPLE_METHOD
-	LCM_SAMPLE_METHOD
-	DDIM_TRAILING_SAMPLE_METHOD
-	TCD_SAMPLE_METHOD
-	RES_MULTISTEP_SAMPLE_METHOD
-	RES_2S_SAMPLE_METHOD
-	SAMPLE_METHOD = iota // Added to match header logic if needed, but SAMPLE_METHOD_COUNT is usually last
-	SAMPLE_METHOD_COUNT = RES_2S_SAMPLE_METHOD + 1
-
-	// Scheduler
-	DISCRETE_SCHEDULER Scheduler = iota
-	KARRAS_SCHEDULER
-	EXPONENTIAL_SCHEDULER
-	AYS_SCHEDULER
-	GITS_SCHEDULER
-	SGM_UNIFORM_SCHEDULER
-	SIMPLE_SCHEDULER
-	SMOOTHSTEP_SCHEDULER
-	KL_OPTIMAL_SCHEDULER
-	LCM_SCHEDULER
-	BONG_TANGENT_SCHEDULER
-	SCHEDULER_COUNT
-
-	// Prediction
+// Prediction 常量，对应 C 的 enum prediction_t
+const (
 	EPS_PRED Prediction = iota
 	V_PRED
 	EDM_V_PRED
@@ -129,8 +100,10 @@ const (
 	FLUX_FLOW_PRED
 	FLUX2_FLOW_PRED
 	PREDICTION_COUNT
+)
 
-	// SdType
+// SdType 常量，对应 C 的 enum sd_type_t
+const (
 	SD_TYPE_F32     SdType = 0
 	SD_TYPE_F16     SdType = 1
 	SD_TYPE_Q4_0    SdType = 2
@@ -164,27 +137,35 @@ const (
 	SD_TYPE_TQ2_0   SdType = 35
 	SD_TYPE_MXFP4   SdType = 39
 	SD_TYPE_COUNT   SdType = 40
+)
 
-	// SdLogLevel
+// SdLogLevel 常量，对应 C 的 enum sd_log_level_t
+const (
 	SD_LOG_DEBUG SdLogLevel = iota
 	SD_LOG_INFO
 	SD_LOG_WARN
 	SD_LOG_ERROR
+)
 
-	// Preview
+// Preview 常量，对应 C 的 enum preview_t
+const (
 	PREVIEW_NONE Preview = iota
 	PREVIEW_PROJ
 	PREVIEW_TAE
 	PREVIEW_VAE
 	PREVIEW_COUNT
+)
 
-	// LoraApplyMode
+// LoraApplyMode 常量，对应 C 的 enum lora_apply_mode_t
+const (
 	LORA_APPLY_AUTO LoraApplyMode = iota
 	LORA_APPLY_IMMEDIATELY
 	LORA_APPLY_AT_RUNTIME
 	LORA_APPLY_MODE_COUNT
+)
 
-	// SdCacheMode
+// SdCacheMode 常量，对应 C 的 enum sd_cache_mode_t
+const (
 	SD_CACHE_DISABLED SdCacheMode = iota
 	SD_CACHE_EASYCACHE
 	SD_CACHE_UCACHE
@@ -591,16 +572,35 @@ func setMockImplementations() {
 		return CPU_RNG
 	}
 	sdSampleMethodName = func(t SampleMethod) *byte {
-		return CString("mock sample method")
+		// 与真实库行为一致：越界返回 "NONE"
+		if t >= 0 && int(t) < len(sampleMethodNames) {
+			return CString(sampleMethodNames[t])
+		}
+		return CString(noneStr)
 	}
 	strToSampleMethod = func(s *byte) SampleMethod {
-		return EULER_A_SAMPLE_METHOD
+		str := GoString(s)
+		for i, name := range sampleMethodNames {
+			if str == name {
+				return SampleMethod(i)
+			}
+		}
+		return SAMPLE_METHOD_COUNT
 	}
 	sdSchedulerName = func(t Scheduler) *byte {
-		return CString("mock scheduler")
+		if t >= 0 && int(t) < len(schedulerNames) {
+			return CString(schedulerNames[t])
+		}
+		return CString(noneStr)
 	}
 	strToScheduler = func(s *byte) Scheduler {
-		return KARRAS_SCHEDULER
+		str := GoString(s)
+		for i, name := range schedulerNames {
+			if str == name {
+				return Scheduler(i)
+			}
+		}
+		return SCHEDULER_COUNT
 	}
 	sdPredictionName = func(t Prediction) *byte {
 		return CString("mock prediction")
@@ -640,14 +640,11 @@ func GoString(c *byte) string {
 		return ""
 	}
 	// 关键修复：正确计算字符串长度直到 NULL
+	// 使用 unsafe.Add 保持指针链，避免 uintptr 来回转换
+	// （后者会触发 checkptr: pointer arithmetic result points to invalid allocation）
 	var length int
-	p := uintptr(unsafe.Pointer(c))
-	for {
-		if *(*byte)(unsafe.Pointer(p)) == 0 {
-			break
-		}
+	for p := c; *p != 0; p = (*byte)(unsafe.Add(unsafe.Pointer(p), 1)) {
 		length++
-		p++
 	}
 	return unsafe.String(c, length)
 }

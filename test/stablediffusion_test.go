@@ -1,9 +1,12 @@
 package test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/example/stablediffusion"
+	"github.com/example/stablediffusion/bindings"
 )
 
 // 测试用例2.1：系统信息获取
@@ -104,4 +107,87 @@ func TestImageGenerationConfig(t *testing.T) {
 	}
 	
 	t.Logf("Image generation config created successfully")
+}
+
+// 测试用例2.7：采样器/调度器字符串解析
+func TestParseSamplerScheduler(t *testing.T) {
+	// 预期结果：合法名称解析为对应枚举，且与 String() 往返一致
+	m, err := stablediffusion.ParseSampleMethod("euler_a")
+	if err != nil {
+		t.Fatalf("ParseSampleMethod(euler_a) returned error: %v", err)
+	}
+	if m != bindings.EULER_A_SAMPLE_METHOD {
+		t.Errorf("ParseSampleMethod(euler_a) = %v, want EULER_A_SAMPLE_METHOD", m)
+	}
+
+	s, err := stablediffusion.ParseScheduler("karras")
+	if err != nil {
+		t.Fatalf("ParseScheduler(karras) returned error: %v", err)
+	}
+	if s != bindings.KARRAS_SCHEDULER {
+		t.Errorf("ParseScheduler(karras) = %v, want KARRAS_SCHEDULER", s)
+	}
+}
+
+// 测试用例2.8：未知采样器/调度器返回错误
+func TestParseUnknownSamplerScheduler(t *testing.T) {
+	// 预期结果：返回错误，错误信息中包含支持的取值列表
+	_, err := stablediffusion.ParseSampleMethod("not_a_sampler")
+	var unknownSampler *bindings.UnknownSampleMethodError
+	if !errors.As(err, &unknownSampler) {
+		t.Fatalf("error type = %T, want *bindings.UnknownSampleMethodError", err)
+	}
+	if !strings.Contains(err.Error(), "euler_a") {
+		t.Errorf("error message should list supported samplers, got: %v", err)
+	}
+
+	_, err = stablediffusion.ParseScheduler("not_a_scheduler")
+	var unknownScheduler *bindings.UnknownSchedulerError
+	if !errors.As(err, &unknownScheduler) {
+		t.Fatalf("error type = %T, want *bindings.UnknownSchedulerError", err)
+	}
+	if !strings.Contains(err.Error(), "karras") {
+		t.Errorf("error message should list supported schedulers, got: %v", err)
+	}
+}
+
+// 测试用例2.9：GenerateImage 对未知采样器/调度器返回错误
+func TestGenerateImageValidatesSampler(t *testing.T) {
+	// 预期结果：在调用底层库之前就拦截非法枚举值并返回错误
+	ctx := &stablediffusion.Context{}
+
+	_, err := ctx.GenerateImage(stablediffusion.GenerationConfig{
+		Prompt: "test",
+		Sampler: stablediffusion.SamplerConfig{
+			Method:    bindings.SampleMethod(99),
+			Scheduler: bindings.KARRAS_SCHEDULER,
+		},
+	})
+	var unknownSampler *bindings.UnknownSampleMethodError
+	if !errors.As(err, &unknownSampler) {
+		t.Errorf("GenerateImage with invalid method error = %v, want UnknownSampleMethodError", err)
+	}
+
+	_, err = ctx.GenerateImage(stablediffusion.GenerationConfig{
+		Prompt: "test",
+		Sampler: stablediffusion.SamplerConfig{
+			Method:    bindings.EULER_A_SAMPLE_METHOD,
+			Scheduler: bindings.Scheduler(-1),
+		},
+	})
+	var unknownScheduler *bindings.UnknownSchedulerError
+	if !errors.As(err, &unknownScheduler) {
+		t.Errorf("GenerateImage with invalid scheduler error = %v, want UnknownSchedulerError", err)
+	}
+}
+
+// 测试用例2.10：支持项查询
+func TestSupportedSamplersSchedulers(t *testing.T) {
+	// 预期结果：Mock 实现下返回全部枚举值
+	if got := len(stablediffusion.SupportedSampleMethods()); got != int(bindings.SAMPLE_METHOD_COUNT) {
+		t.Errorf("len(SupportedSampleMethods()) = %d, want %d", got, int(bindings.SAMPLE_METHOD_COUNT))
+	}
+	if got := len(stablediffusion.SupportedSchedulers()); got != int(bindings.SCHEDULER_COUNT) {
+		t.Errorf("len(SupportedSchedulers()) = %d, want %d", got, int(bindings.SCHEDULER_COUNT))
+	}
 }
