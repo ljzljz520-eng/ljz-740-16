@@ -82,14 +82,19 @@ type LoraApplyMode int
 type SdCacheMode int
 
 // 常量定义
+//
+// 注意：每个枚举必须放在独立的 const 块中，使 iota 从 0 重新开始。
+// 这些数值与 stable-diffusion.h 中的 C 枚举一一对应，不可随意改动。
 const (
 	// RngType
 	STD_DEFAULT_RNG RngType = iota
 	CUDA_RNG
 	CPU_RNG
 	RNG_TYPE_COUNT
+)
 
-	// SampleMethod
+const (
+	// SampleMethod（采样器）
 	EULER_SAMPLE_METHOD SampleMethod = iota
 	EULER_A_SAMPLE_METHOD
 	HEUN_SAMPLE_METHOD
@@ -104,10 +109,11 @@ const (
 	TCD_SAMPLE_METHOD
 	RES_MULTISTEP_SAMPLE_METHOD
 	RES_2S_SAMPLE_METHOD
-	SAMPLE_METHOD = iota // Added to match header logic if needed, but SAMPLE_METHOD_COUNT is usually last
-	SAMPLE_METHOD_COUNT = RES_2S_SAMPLE_METHOD + 1
+	SAMPLE_METHOD_COUNT
+)
 
-	// Scheduler
+const (
+	// Scheduler（调度器）
 	DISCRETE_SCHEDULER Scheduler = iota
 	KARRAS_SCHEDULER
 	EXPONENTIAL_SCHEDULER
@@ -120,7 +126,9 @@ const (
 	LCM_SCHEDULER
 	BONG_TANGENT_SCHEDULER
 	SCHEDULER_COUNT
+)
 
+const (
 	// Prediction
 	EPS_PRED Prediction = iota
 	V_PRED
@@ -129,8 +137,9 @@ const (
 	FLUX_FLOW_PRED
 	FLUX2_FLOW_PRED
 	PREDICTION_COUNT
-
-	// SdType
+)
+const (
+	// SdType（数值在 C 头文件中非连续，必须显式指定）
 	SD_TYPE_F32     SdType = 0
 	SD_TYPE_F16     SdType = 1
 	SD_TYPE_Q4_0    SdType = 2
@@ -164,26 +173,34 @@ const (
 	SD_TYPE_TQ2_0   SdType = 35
 	SD_TYPE_MXFP4   SdType = 39
 	SD_TYPE_COUNT   SdType = 40
+)
 
+const (
 	// SdLogLevel
 	SD_LOG_DEBUG SdLogLevel = iota
 	SD_LOG_INFO
 	SD_LOG_WARN
 	SD_LOG_ERROR
+)
 
+const (
 	// Preview
 	PREVIEW_NONE Preview = iota
 	PREVIEW_PROJ
 	PREVIEW_TAE
 	PREVIEW_VAE
 	PREVIEW_COUNT
+)
 
+const (
 	// LoraApplyMode
 	LORA_APPLY_AUTO LoraApplyMode = iota
 	LORA_APPLY_IMMEDIATELY
 	LORA_APPLY_AT_RUNTIME
 	LORA_APPLY_MODE_COUNT
+)
 
+const (
 	// SdCacheMode
 	SD_CACHE_DISABLED SdCacheMode = iota
 	SD_CACHE_EASYCACHE
@@ -591,16 +608,28 @@ func setMockImplementations() {
 		return CPU_RNG
 	}
 	sdSampleMethodName = func(t SampleMethod) *byte {
-		return CString("mock sample method")
+		if name := t.String(); name != "" {
+			return CString(name)
+		}
+		return CString("unknown")
 	}
 	strToSampleMethod = func(s *byte) SampleMethod {
-		return EULER_A_SAMPLE_METHOD
+		if m, ok := ParseSampleMethod(GoString(s)); ok {
+			return m
+		}
+		return SAMPLE_METHOD_COUNT
 	}
 	sdSchedulerName = func(t Scheduler) *byte {
-		return CString("mock scheduler")
+		if name := t.String(); name != "" {
+			return CString(name)
+		}
+		return CString("unknown")
 	}
 	strToScheduler = func(s *byte) Scheduler {
-		return KARRAS_SCHEDULER
+		if sc, ok := ParseScheduler(GoString(s)); ok {
+			return sc
+		}
+		return SCHEDULER_COUNT
 	}
 	sdPredictionName = func(t Prediction) *byte {
 		return CString("mock prediction")

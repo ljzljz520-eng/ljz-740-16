@@ -302,6 +302,11 @@ func (u *Upscaler) GetUpscaleFactor() int {
 
 // GenerateImage 生成图像
 func (c *Context) GenerateImage(cfg GenerationConfig) ([]*Image, error) {
+	// 在调用底层库之前校验采样器与调度器
+	if err := validateSamplerConfig(cfg.Sampler); err != nil {
+		return nil, err
+	}
+
 	// 初始化图像生成参数
 	params := &bindings.SdImgGenParams{}
 	bindings.SdImgGenParamsInit(params)
@@ -524,6 +529,14 @@ type VideoGenerationConfig struct {
 
 // GenerateVideo 生成视频
 func (c *Context) GenerateVideo(cfg VideoGenerationConfig) ([]*Image, error) {
+	// 在调用底层库之前校验采样器与调度器
+	if err := validateSamplerConfig(cfg.Sampler); err != nil {
+		return nil, err
+	}
+	if err := validateSamplerConfig(cfg.HighNoiseSampler); err != nil {
+		return nil, err
+	}
+
 	params := &bindings.SdVidGenParams{}
 	bindings.SdVidGenParamsInit(params)
 

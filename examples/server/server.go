@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/example/stablediffusion"
-	"github.com/example/stablediffusion/bindings"
 )
 
 // 定义请求和响应结构
@@ -148,8 +147,8 @@ func generateHandler(w http.ResponseWriter, r *http.Request) {
 		Seed:           req.Seed,
 		BatchCount:     req.BatchCount,
 		Sampler: stablediffusion.SamplerConfig{
-			Scheduler:    bindings.KARRAS_SCHEDULER,
-			Method:       bindings.EULER_A_SAMPLE_METHOD,
+			Scheduler:    stablediffusion.SchedulerKarras,
+			Method:       stablediffusion.SamplerEulerA,
 			Steps:        req.Steps,
 			TxtCfg:       req.GuidanceScale,
 			ImgCfg:       1.0,
